@@ -1,2 +1,5 @@
 *.pkl
 *.mat
+*.pyo
+*.pyc
+__pycache__/
