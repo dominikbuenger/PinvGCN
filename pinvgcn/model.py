@@ -7,7 +7,15 @@ import torch_geometric.nn.inits as inits
     
 
 class PinvConv(torch.nn.Module):
-    def __init__(self, in_channels, out_channels, bias=False, is_last=False):
+    r"""A single layer that performs graph convolution with the pseudoinverse
+    Laplacian. The pseudoinverse must be set up beforehand, i.e., the data 
+    object passed to the forward operation must have the apply_pinv method. If
+    is_last is True and the module is in training mode, the forward operation
+    will only return a subset of rows of the output corresponding to the
+    training samples (because the other rows are not required for loss
+    computation)."""
+    
+    def __init__(self, in_channels, out_channels, bias=True, is_last=False):
         super().__init__()
         self.is_last = is_last
 
@@ -36,6 +44,14 @@ class GlorotLinear(torch.nn.Linear):
 
 
 class PinvGCN(torch.nn.Module):
+    r"""Full neural network with the Pseudoinverse GCN architecture. The
+    pseudoinverse must be set up beforehand, i.e., the data object passed to 
+    the forward operation must have the apply_pinv method. For efficiency, the 
+    application of the convolutional matrix to the input features must also be
+    computed beforehand and stored in the pinv_preconvolved_x field of the 
+    data. In training mode, the forward operation will only return a subset of 
+    rows of the output corresponding to the training samples (because the 
+    other rows are not required for loss computation)."""
     def __init__(self, in_channels, out_channels, hidden=[32], dropout=0.5, bias=True):
         super().__init__()
         self.depth = len(hidden)+1
@@ -74,6 +90,8 @@ class PinvGCN(torch.nn.Module):
         return X
     
     def run_training(self, data, optimizer, num_epochs):
+        r"""Run the full training process with a given optimizer. The data
+        object must have the prepare_training method."""
         self.train()
         data.prepare_training()
         y = data.y[data.train_mask]
@@ -85,6 +103,7 @@ class PinvGCN(torch.nn.Module):
             optimizer.step()
 
     def eval_accuracy(self, data):
+        r"""Evaluate the accuracy of the trained network on the test set."""
         self.eval()
         _, pred = self(data)[data.test_mask].max(dim=1)
         return float(pred.eq(data.y[data.test_mask]).sum().item()) / data.test_mask.sum().item()

@@ -8,6 +8,10 @@ from torch_geometric.data import Data, InMemoryDataset, download_url
 
 
 def load_hypergraph_data(name, dir=None):
+    r"""Load a hypergraph dataset and return its Data object. Currently
+    supported dataset names are Mushroom, Covertype45, and Covertype67. Upon
+    first usage, data is downloaded from the UCI website and then processed to
+    turn the categorial attributes into hyperedges."""
     if dir is None:
         dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'data')
     path = os.path.join(dir, name)
@@ -43,11 +47,14 @@ class UCIHypergraphDataset(InMemoryDataset):
             y = torch.LongTensor(labels),
             hyperedge_weight = torch.ones(incidence.shape[1], dtype=torch.float))
         
-        data = data if self.pre_transform is None else self.pre_transform(data)
+        if self.pre_transform is None:
+            data = self.pre_transform(data)
         torch.save(self.collate([data]), self.processed_paths[0])
 
 
 class MushroomDataset(UCIHypergraphDataset):
+    r"""Subclass of InMemoryDataset that downloads and processes the Mushroom
+    dataset from the UCI website."""
     
     url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/mushroom/agaricus-lepiota.data'
     
@@ -87,6 +94,9 @@ class MushroomDataset(UCIHypergraphDataset):
 
 
 class CovertypeDataset(UCIHypergraphDataset):
+    r"""Subclass of InMemoryDataset that downloads and processes the Covertype
+    dataset from the UCI website. A subset of the data can be used by only 
+    using certain classes."""
     
     url = 'https://archive.ics.uci.edu/ml/machine-learning-databases/covtype/covtype.data.gz'
     

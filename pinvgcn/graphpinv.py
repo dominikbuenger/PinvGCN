@@ -9,6 +9,11 @@ from .pinvdata import apply_pinv_filter, LowRankPinvData
 
 
 def adjacency(data, loop_weights=None, dense=False):
+    r"""Returns the adjacency matrix resulting from the edges given by the
+    edge_index (and optionally edge_weight) fields in the data object. If 
+    loop_weights is not None, additional self loops are added with that
+    weight. By default, a scipy.sparse.coo_matrix is returned. If dense is 
+    True, it is converted into a numpy array instead."""
     n = data.num_nodes
     ii, jj = data.edge_index.cpu().numpy()
     if 'edge_weight' not in data:
@@ -27,6 +32,14 @@ def adjacency(data, loop_weights=None, dense=False):
     return adj
 
 def normalized_adjacency(data, loop_weights=None, dense=False):
+    r"""Returns the symmetrically normalized adjacency matrix resulting from 
+    the edges given by the edge_index (and optionally edge_weight) fields in 
+    the data object. The result is the unnormalized adjacency matrix 
+    multiplied with the diagonal inverse square root degree matrix from both
+    sides. If loop_weights is not None, additional self loops are added with 
+    that weight. By default, a scipy.sparse.coo_matrix is returned. If dense is 
+    True, it is converted into a numpy array instead.
+    """
     adj = adjacency(data, loop_weights, dense)
     d = np.squeeze(np.asarray(adj.sum(1)))
     d = 1/np.sqrt(d)
@@ -37,6 +50,9 @@ def normalized_adjacency(data, loop_weights=None, dense=False):
     
     
 def graph_laplacian_decomposition(adj, num_ev=None, tol=0):
+    r"""Return a (partial) eigen decomposition of the graph Laplacian. If
+    num_ev is not None, only that many smallest eigenvalues are computed. The 
+    parameter tol is used for scipy.linalg.eigs (if it is called)."""
     n = adj.shape[0]
     if num_ev is None or num_ev > n/2:
         if sp.issparse(adj):
@@ -58,6 +74,15 @@ def graph_laplacian_decomposition(adj, num_ev=None, tol=0):
     return w.astype(np.float32), U.astype(np.float32)
 
 class GraphPinv(object):
+    r"""Class in the style of a torch_geometric transform. Replaces given data 
+    by a new data object holding a representation of the graph Laplacian
+    and providing the apply_pinv method. If rank is not None, a low-rank
+    approximation is used. eig_tol is the tolerance for the SVD. eig_threshold
+    determines which eigenvalues are treated as zero. If loop_weights is not
+    None, additional self loops are added with that weight. If dense_graph is
+    True, internal computations are done with the adjacency matrix stored as
+    a numpy array instead of a scipy.sparse.coo_matrix."""
+    
     
     def __init__(self, rank=None, loop_weights=None, dense_graph=False, eig_tol=0, eig_threshold=1e-6):
         self.rank = rank

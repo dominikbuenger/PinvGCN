@@ -7,7 +7,9 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid
 
+
 def load_graph_data(name, dir=None, lcc=False):
+    r"""Load a graph dataset and return its Data object."""
     full_name = name + '_LCC' if lcc else name
     if dir is None:
         dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'data')
@@ -25,6 +27,9 @@ def load_graph_data(name, dir=None, lcc=False):
 
 
 class GraphPreprocess(object):
+    r"""Class in the style of a torch_geometric transform. Used internally in
+    load_graph_data to preprocess the data and optionally compute its largest
+    connected component."""
     
     def __init__(self, lcc=False):
         self.lcc = lcc
@@ -137,6 +142,10 @@ class GraphPreprocess(object):
 
 
 class SBMData(Data):
+    r"""Data subclass for generation of Stochastic Blockmodel data. Creates b
+    samples for each of c classes. The first s samples of each class are 
+    training samples. Graph edges are not created until generate_adjacency is
+    called."""
     def __init__(self, p, q, c, b, s, **kwargs):
         y = np.hstack([i*np.ones(b, dtype=int) for i in range(c)])
         train_mask = np.zeros(c*b, dtype=bool)
@@ -153,6 +162,9 @@ class SBMData(Data):
             **kwargs)
         
     def generate_adjacency(self):
+        r""" Create random undirected, unweighted edges based on the p and q
+        parameters given to the Data constructor.
+        """
         c = self.num_classes
         b = self.block_size
         

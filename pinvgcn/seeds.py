@@ -29,6 +29,10 @@ seeds = [
 
 
 def set_seed(index):
+    r"""Pick the seed with the given index from the seeds list and use it to
+    seed the random number generators of numpy and torch. If the index exceeds
+    the number of available seeds, nothing is done.The seed list was copied 
+    from the file seeds.py in github.com/klicperajo/gdc"""
     if index < len(seeds):
         np.random.seed(seeds[index])
         torch.manual_seed(seeds[index])

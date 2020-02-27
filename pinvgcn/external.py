@@ -8,6 +8,11 @@ import torch
 
 
 def load_from_matlab(dataset, filename, rank=None):
+    r"""Load x and y data and Laplacian eigeninformation computed in MATLAB.
+    The file must be located in data/{dataset}/{filename}. If rank is not 
+    None, only that many eigenvalues from the stored decomposition are used.
+    Returns a data object that provides multiplication with the pseudoinverse.
+    """
     matfile = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'data', dataset, filename)
     try:
         matdata = loadmat(matfile)

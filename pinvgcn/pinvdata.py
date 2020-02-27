@@ -6,7 +6,16 @@ import torch_geometric
 
 
 def apply_pinv_filter(w, U, threshold = 1e-4, max_rank=None, keep_zero=False):
-    
+    r"""Transform a given (partial) eigen decomposition of the Laplacian into
+    its pseudoinverse. Eigenvalues lower than the threshold are treated as
+    zero. If max_rank is given, only that many nonzero eigenvalues are used.
+    If keep_zero is True, the zero eigenvalues will be maintained in the
+    output, otherwise only the subset of nonzero eigenvalues and corresponding
+    eigenvectors is returned (this is the default behaviour). The return value
+    is a tuple of the scaled pseudoinverse eigenvalues, corresponding 
+    eigenvector matrix, and the original smallest nonzero eigenvalue (which 
+    was already used to scale the eigenvalues.)
+    """
     mask = w > threshold
     if not any(mask):
         raise ValueError("Did not find a single positive eigenvalue out of {} (max: {:.4e})".format(w.size, w.max()))
@@ -61,6 +70,9 @@ class BasePinvData(torch_geometric.data.Data):
     
 
 class LowRankPinvData(BasePinvData):
+    r"""Data subclass which stores a low-rank approximation to the Laplacian
+    pseudoinverse and provides the apply_pinv method to perform multiplications
+    with it."""
     
     def __init__(self, w, U, base_data=None, **kwargs):
         super().__init__(base_data, **kwargs)
@@ -72,6 +84,10 @@ class LowRankPinvData(BasePinvData):
         self.pinv_preconvolved_x = None
     
     def prepare_training(self):
+        r"""Setup training by precomputing the convolution of data.x with the
+        pseudoinverse and setting up submatrices required for efficient 
+        computation of only the training rows of the forward operation output.
+        """
         self.pinv_U_training = self.pinv_U[self.train_mask, :]
         
         if 'x' not in self:
@@ -80,6 +96,11 @@ class LowRankPinvData(BasePinvData):
             self.pinv_preconvolved_x = self.apply_pinv(self.x)
             
     def apply_pinv(self, X, W=None, training=False):
+        r"""Compute U*diag(w)*U.T*X*W, where w and U are stored in the 
+        pinv_w and pinv_U fields of this data object. W may be None to omit
+        multiplication with weights. If training is True, the function will
+        only return a subset of rows of the output corresponding to the
+        training samples."""
         if training and self.pinv_U_training is None:
             raise "data.prepare_training must be called before training"
         
@@ -91,6 +112,9 @@ class LowRankPinvData(BasePinvData):
         
         
 class ScalingPlusLowRankPinvData(BasePinvData):
+    r"""Data subclass which stores a representation of the Laplacian
+    pseudoinverse as a scaled identity plus a low-rank matrix and provides the 
+    apply_pinv method to perform multiplications with it."""
     
     def __init__(self, alpha, w, U, base_data=None, **kwargs):
         super().__init__(base_data, **kwargs)
@@ -104,6 +128,10 @@ class ScalingPlusLowRankPinvData(BasePinvData):
         
     
     def prepare_training(self):
+        r"""Setup training by precomputing the convolution of data.x with the
+        pseudoinverse and setting up submatrices required for efficient 
+        computation of only the training rows of the forward operation output.
+        """
         self.pinv_U_training = self.pinv_U[self.train_mask, :]
         
         # if 'x' not in self:
@@ -111,7 +139,12 @@ class ScalingPlusLowRankPinvData(BasePinvData):
         # else:
         self.pinv_preconvolved_x = self.apply_pinv(self.x)
         
-    def apply_pinv(self, X, W=None, training=False):        
+    def apply_pinv(self, X, W=None, training=False):
+        r"""Compute (a*I+U*diag(w)*U.T)*X*W, where a, w, and U are stored in
+        the pinv_alpha, pinv_w, and pinv_U fields of this data object. W may 
+        be None to omit multiplication with weights. If training is True, the 
+        function will only return a subset of rows of the output corresponding
+        to the training samples."""
         if training:
             if self.pinv_U_training is None:
                 raise "data.prepare_training must be called before training"
