@@ -69,11 +69,13 @@ class PinvGCN(torch.nn.Module):
         for layer in self.layers:
             layer.reset_parameters()
             
-    def reg_params(self):
-        return [p for layer in self.layers[:-1] for p in layer.parameters()]
+    def weight_matrices(self):
+        # return [p for layer in self.layers[:-1] for p in layer.parameters()]
+        return [l.weight for l in self.layers]
 
-    def non_reg_params(self):
-        return self.layers[-1].parameters()
+    def bias_vectors(self):
+        # return self.layers[-1].parameters()
+        return [l.bias for l in self.layers]
             
     def forward(self, data):
         X = data.pinv_preconvolved_x
@@ -101,6 +103,7 @@ class PinvGCN(torch.nn.Module):
             loss = F.cross_entropy(out, y)
             loss.backward()
             optimizer.step()
+        return loss.item()
 
     def eval_accuracy(self, data):
         r"""Evaluate the accuracy of the trained network on the test set."""

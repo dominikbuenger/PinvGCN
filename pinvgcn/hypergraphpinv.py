@@ -50,8 +50,9 @@ class HypergraphPinv(object):
     approximation is used. eig_tol is the tolerance for the SVD. eig_threshold
     determines which eigenvalues are treated as zero."""
     
-    def __init__(self, rank=None, eig_tol=0, eig_threshold=1e-6):
+    def __init__(self, rank=None, beta=0, eig_tol=0, eig_threshold=1e-6):
         self.rank = rank
+        self.beta = beta
         self.eig_tol = eig_tol
         self.eig_threshold = eig_threshold
         
@@ -60,7 +61,7 @@ class HypergraphPinv(object):
     
         if self.rank is None:
             w, U = hypergraph_laplacian_decomposition(inc, tol=self.eig_tol)
-            w, U, alpha = apply_pinv_filter(w, U, threshold=self.eig_threshold)
+            w, U, alpha = apply_pinv_filter(w, U, threshold=self.eig_threshold, keep_zero=True, beta=self.beta)
             
             data = ScalingPlusLowRankPinvData(alpha, w-alpha, U, data)
         

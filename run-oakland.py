@@ -29,6 +29,10 @@ parser.add_argument('--dropout', type=float, default=0.5, metavar='RATE',
     help='dropout rate')
 parser.add_argument('--no-bias', default=False, action='store_true',
     help='disable bias')
+parser.add_argument('--learning-rate', default=0.05, type=float, metavar='LR',
+    help='learning rate')
+parser.add_argument('--weight-decay', default=5e-4, type=float, metavar='DECAY',
+    help='weight decay on weight matrices (not on bias vectors)')
 parser.add_argument('--disable-cuda', action='store_true', default=False,
     help='disable CUDA acceleration')
 parser.add_argument('--no-save', action='store_true', default=False,
@@ -51,13 +55,16 @@ else:
 
 tic = timer()
 data = load_from_matlab('Oakland', args.dataset + '.mat', rank=args.rank)
+rank = data.pinv_w.shape[0]
+print("Loaded approximation rank is {}".format(rank))
+
 data = data.to(device)
 model = PinvGCN(data.num_features, data.num_classes, hidden=args.hidden, dropout=args.dropout, bias=not args.no_bias)
 model.to(device)
 
 optimizer = torch.optim.Adam([
-        dict(params=model.reg_params(), weight_decay=5e-4),
-        dict(params=model.non_reg_params(), weight_decay=0)], lr=0.01)
+        dict(params=model.weight_matrices(), weight_decay=args.weight_decay),
+        dict(params=model.bias_vectors(), weight_decay=0)], lr=args.learning_rate)
 setup_time = timer() - tic
 print('Loading from MAT file done in {:.4} seconds'.format(setup_time))
 
@@ -93,9 +100,7 @@ if not args.no_save:
     if args.split_size is not None:
         dataset_name += '-split{}'.format(args.split_size)
     
-    architecture_name = 'PinvGCN'
-    if args.rank is not None:
-        architecture_name += '-rank{}'.format(args.rank)
+    architecture_name = 'PinvGCN-rank{}'.format(rank)
     if args.no_bias:
         architecture_name += '-nobias'
     

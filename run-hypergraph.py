@@ -29,6 +29,10 @@ parser.add_argument('--hidden', nargs='*', type=int, default=[32], metavar='H',
     help='hidden layer widths')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='RATE',
     help='dropout rate')
+parser.add_argument('--learning-rate', default=0.05, type=float, metavar='LR',
+    help='learning rate')
+parser.add_argument('--weight-decay', default=5e-4, type=float, metavar='DECAY',
+    help='weight decay on weight matrices (not on bias vectors)')
 parser.add_argument('--no-bias', default=False, action='store_true',
     help='disable bias')
 parser.add_argument('--disable-cuda', action='store_true', default=False,
@@ -62,8 +66,9 @@ model = PinvGCN(data.num_features, data.num_classes, hidden=args.hidden, dropout
 model = model.to(device)
 
 optimizer = torch.optim.Adam([
-        dict(params=model.reg_params(), weight_decay=5e-4),
-        dict(params=model.non_reg_params(), weight_decay=0)], lr=0.01)
+        dict(params=model.weight_matrices(), weight_decay=args.weight_decay),
+        dict(params=model.bias_vectors(), weight_decay=0)],
+    lr=args.learning_rate)
 setup_time = timer() - tic
 print('Setup done in {:.4} seconds'.format(setup_time))
 

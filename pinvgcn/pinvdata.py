@@ -5,7 +5,7 @@ import torch
 import torch_geometric
 
 
-def apply_pinv_filter(w, U, threshold = 1e-4, max_rank=None, keep_zero=False):
+def apply_pinv_filter(w, U, threshold = 1e-4, max_rank=None, keep_zero=False, beta=0.0):
     r"""Transform a given (partial) eigen decomposition of the Laplacian into
     its pseudoinverse. Eigenvalues lower than the threshold are treated as
     zero. If max_rank is given, only that many nonzero eigenvalues are used.
@@ -20,10 +20,10 @@ def apply_pinv_filter(w, U, threshold = 1e-4, max_rank=None, keep_zero=False):
     if not any(mask):
         raise ValueError("Did not find a single positive eigenvalue out of {} (max: {:.4e})".format(w.size, w.max()))
     
-    if keep_zero:
+    if keep_zero or beta != 0:
         alpha = w[mask].min()
         w[mask] = alpha / w[mask]
-        w[~mask] = 0
+        w[~mask] = beta
         if max_rank is not None and max_rank < mask.sum():
             ind = np.argpartition(w, -max_rank)[:-max_rank]
             w[ind] = 0
