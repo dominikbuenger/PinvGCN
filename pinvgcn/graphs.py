@@ -163,8 +163,7 @@ class SBMData(Data):
         
     def generate_adjacency(self):
         r""" Create random undirected, unweighted edges based on the p and q
-        parameters given to the Data constructor.
-        """
+        parameters given to the Data constructor."""
         c = self.num_classes
         b = self.block_size
         

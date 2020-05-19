@@ -80,7 +80,7 @@ class PinvGCN(torch.nn.Module):
     def forward(self, data):
         X = data.pinv_preconvolved_x
         if X is None:
-            raise "data.prepare_training must be called before training"
+            raise RuntimeError("data.prepare_training must be called before training")
         X = self.layers[0](X)
         
         for i in range(1, self.depth):

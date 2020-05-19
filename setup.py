@@ -6,5 +6,4 @@ setup(name = 'pinvgcn',
     author = 'Dominik Alfke',
     author_email = 'dominik.alfke@mathematik.tu-chemnitz.de',
     url = 'https://github.com/dominikalfke/PinvGCN',
-    packages = ['pinvgcn'],
-    py_modules = [])
+    packages = ['pinvgcn'])
