@@ -1,4 +1,5 @@
 
+from .data import setup_spectral_data, random_split, check_masks
 from .model import get_coefficient_preset, PreconvolvedLinear, PinvConv, PinvGCN
 from .graphs import load_graph_data, GraphSpectralSetup, SBMData
 from .hypergraphs import load_hypergraph_data, HypergraphSpectralSetup

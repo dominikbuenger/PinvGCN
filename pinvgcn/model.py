@@ -91,7 +91,7 @@ class PinvConv(ConvBase):
     """
     
     def __init__(self, in_channels, out_channels, coeffs, bias=True, is_last=False):
-        super().__init__(in_channels, out_channels, len(coeffs), bias, is_last)
+        super().__init__(in_channels, out_channels, len(coeffs), bias)
         
         self.is_last = is_last
         self.coeffs = coeffs
