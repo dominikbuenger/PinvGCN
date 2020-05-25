@@ -46,6 +46,17 @@ def get_coefficient_preset(name, alpha=1, beta=1, gamma=1):
         raise ValueError("Unknown coefficient preset: {}".format(name))
 
 
+
+def print_filter_values(coeffs, data):
+    for i, c in enumerate(coeffs):
+        alpha, beta, gamma = c
+        print("Filter basis function #{}:".format(i+1))
+        print(" - zero-impulse part: {:.3f}".format(alpha))
+        with np.printoptions(precision=3, suppress=True):
+            print(" - pseudoinverse part: ", data.eigengap * beta / data.nonzero_w.cpu().numpy())
+        print(" - high-pass part: {:.3f}".format(gamma * data.eigengap))
+
+
 class ConvBase(torch.nn.Module):
     r"""
     Base class for layer modules that perform spectral convolution with a 
