@@ -255,4 +255,6 @@ class PinvGCN(torch.nn.Module):
         _, pred = self(data, input)[data.test_mask].max(dim=1)
         return float(pred.eq(data.y[data.test_mask]).sum().item()) / data.test_mask.sum().item()
 
-        
+
+    def average_absolute_weight_entries(self):
+        return [np.array([np.abs(W.detach().cpu().numpy()).mean() for W in l.weights]) for l in self.layers]
