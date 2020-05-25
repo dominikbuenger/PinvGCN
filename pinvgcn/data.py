@@ -19,10 +19,12 @@ def setup_spectral_data(data, w, U, threshold=1e-2, max_rank=None):
     if zero_mult != 1:
         warn("Multiplicity of Laplacian eigenvalue 0 is {} instead of expected 1".format(zero_mult))
     
+    data.nonzero_w, ind = torch.sort(data.nonzero_w)
+    data.nonzero_U = data.nonzero_U[:, ind]
+    
     if max_rank is not None and data.nonzero_w.numel() > max_rank:
-        ind = np.argpartition(data.nonzero_w.detach().cpu().numpy(), max_rank)[:max_rank]
-        data.nonzero_w = data.nonzero_w[ind]
-        data.nonzero_U = data.nonzero_U[:, ind]
+        data.nonzero_w = data.nonzero_w[:max_rank]
+        data.nonzero_U = data.nonzero_U[:, :max_rank]
     data.rank = data.nonzero_w.numel()
     
     return data
