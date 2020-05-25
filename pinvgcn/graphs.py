@@ -12,11 +12,10 @@ from torch_geometric.datasets import Planetoid
 from .data import setup_spectral_data, check_masks
 
 
-def load_graph_data(name, dir=None, lcc=False):
+def load_graph_data(name, dir, lcc=False):
     r"""Load a graph dataset and return its Data object."""
+    
     full_name = name + '_LCC' if lcc else name
-    if dir is None:
-        dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'data')
     path = os.path.join(dir, full_name)
     
     if name in ['Cora', 'Citeseer', 'Pubmed']:

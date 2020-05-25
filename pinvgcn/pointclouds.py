@@ -11,7 +11,7 @@ import fastadj
 from .data import setup_spectral_data, SingleSliceDataset
 
 
-def load_point_cloud_data(name, dir=None):
+def load_point_cloud_data(name, dir):
     r"""
     Load a point cloud dataset and return its Data object. Currently
     supported dataset names are Oakland1 and Oakland2. Upon first usage, data
@@ -19,8 +19,6 @@ def load_point_cloud_data(name, dir=None):
     [http://www.cs.cmu.edu/~vmr/datasets/oakland_3d/cvpr09/doc/].
     """
     
-    if dir is None:
-        dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'data')
     path = os.path.join(dir, name)
     
     if name == 'Oakland1':

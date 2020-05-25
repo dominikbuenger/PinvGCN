@@ -9,13 +9,12 @@ from torch_geometric.data import download_url
 from .data import setup_spectral_data, SingleSliceDataset
 
 
-def load_hypergraph_data(name, dir=None):
+def load_hypergraph_data(name, dir):
     r"""Load a hypergraph dataset and return its Data object. Currently
     supported dataset names are Mushroom, Covertype45, and Covertype67. Upon
     first usage, data is downloaded from the UCI website and then processed to
     turn the categorial attributes into hyperedges."""
-    if dir is None:
-        dir = os.path.join(os.path.dirname(os.path.realpath(__file__)), '..', 'data')
+    
     path = os.path.join(dir, name)
     
     if name == 'Mushroom':
