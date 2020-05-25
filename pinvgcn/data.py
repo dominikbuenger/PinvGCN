@@ -1,7 +1,8 @@
 
+import numpy as np
+from warnings import warn
 
 import torch
-import numpy as np
 from torch_geometric.data import Data, InMemoryDataset
         
 def setup_spectral_data(data, w, U, threshold=1e-2, max_rank=None):
@@ -13,6 +14,10 @@ def setup_spectral_data(data, w, U, threshold=1e-2, max_rank=None):
     data.nonzero_U = U[:, nonzero_mask]
     data.nonzero_w = w[nonzero_mask]
     data.eigengap = data.nonzero_w.min().item()
+    
+    zero_mult = data.zero_U.shape[1]
+    if zero_mult != 1:
+        warn("Multiplicity of Laplacian eigenvalue 0 is {} instead of expected 1".format(zero_mult))
     
     if max_rank is not None and data.nonzero_w.numel() > max_rank:
         ind = np.argpartition(data.nonzero_w.detach().cpu().numpy(), max_rank)[:max_rank]
