@@ -7,6 +7,8 @@ import torch
 from torch_geometric.data import Data
 from torch_geometric.datasets import Planetoid
 
+from .data import check_masks
+
 
 def load_graph_data(name, dir=None, lcc=False):
     r"""Load a graph dataset and return its Data object."""
@@ -35,111 +37,16 @@ class GraphPreprocess(object):
         self.lcc = lcc
     
     def __call__(self, data):
-        if 'train_mask' in data:
-            if 'val_mask' not in data:
-                data.val_mask = torch.zeros(data.num_nodes, dtype=bool)
-    
-            if 'test_mask' not in data:
-                data.test_mask = ~data.train_mask & ~data.val_mask
-    
-        elif 'train_idx' in data:
-            def idx_to_mask(idx):
-                mask = torch.zeros(data.num_nodes, dtype=torch.bool)
-                mask[idx] = True
-                return mask
-    
-            data.train_mask = idx_to_mask(data.train_idx)
-    
-            if 'val_idx' in data:
-                data.val_mask = idx_to_mask(data.val_idx)
-            else:
-                data.val_mask = torch.zeros(data.num_nodes, dtype=bool)
-    
-            if 'test_idx' in data:
-                data.test_mask = idx_to_mask(data.test_idx)
-            else:
-                data.test_mask = ~data.train_mask & ~data.val_mask
-    
-            data.train_idx = data.test_idx = data.val_idx = None
-        else:
-            data.train_mask = data.test_mask = data.val_mask = None
-            
+        
+        check_masks(data)
         
         if 'edge_weight' not in data:
-            if 'edge_attr' in data:
-                data.edge_weight = data.edge_attr
-            else:
-                data.edge_weight = None
+            data.edge_weight = data.edge_attr if 'edge_attr' in data else None
             
         if self.lcc:
-            data = self.lcc_data(data)
-        return data
-    
-    
-    def lcc_data(self, data):
-        edge_index = data.edge_index.cpu().numpy()
-        node_mask = self.lcc_mask(edge_index, data.num_nodes)
+            data = lcc_data(data)
             
-        if node_mask is None:
-            print('Largest connected component: Full graph')
-            return data
-        print('Largest connected component: {}/{} nodes'.format(node_mask.sum(), data.num_nodes))
-    
-        node_indices = -np.ones(data.num_nodes, dtype=int)
-        node_indices[node_mask] = np.arange(node_mask.sum())
-        edge_mask = node_mask[edge_index[0]]
-        edge_index = node_indices[edge_index[:,edge_mask]]
-    
-        kwargs = {}
-        for key, val in data.__dict__.items():
-            if val is None:
-                pass
-            elif key == 'x':
-                val = val[node_mask,:]
-            elif key in ['y','train_mask','test_mask','val_mask']:
-                val = val[node_mask]
-            elif key == 'edge_index':
-                val = torch.tensor(edge_index)
-            elif key in ['edge_weight', 'edge_attr']:
-                val = val[edge_mask]
-            kwargs[key] = val
-        return Data(**kwargs)
-
-    def lcc_mask(self, edge_index, num_nodes):
-        edge_index = edge_index[:, np.argsort(edge_index[0])]
-        neighborhoods = np.zeros(num_nodes+1, dtype=int)
-        j = 0
-        for e in range(edge_index.shape[1]):
-            i = edge_index[0, e]
-            while j < i:
-                j += 1
-                neighborhoods[j] = e
-        while j < num_nodes:
-            j += 1
-            neighborhoods[j] = edge_index.shape[1]
-        # now the edge indices e with edge_index[0,e] == j are exactly those in range(neighborhoods[j], neighborhoods[j+1])
-        
-        components = np.zeros(num_nodes, dtype=int)
-        c = 0
-        q = Queue()
-        for start in range(num_nodes):
-            if components[start] != 0:
-                continue
-            c += 1
-            components[start] = c
-            q.put(start)
-            while not q.empty():
-                j = q.get()
-                for k in edge_index[1, neighborhoods[j]:neighborhoods[j+1]]:
-                    if components[k] == 0:
-                        components[k] = c
-                        q.put(k)
-    
-        if c <= 1:
-            return None
-        c_max = 1+np.argmax([(components == i+1).sum() for i in range(c)])
-        return components == c_max
-
+        return data
 
 class SBMData(Data):
     r"""Data subclass for generation of Stochastic Blockmodel data. Creates b
@@ -181,3 +88,68 @@ class SBMData(Data):
                             edges.append([j,i])
                             
         self.edge_index = torch.tensor(np.array(edges).T, device=self.y.device)
+        
+
+def lcc_data(data):
+    edge_index = data.edge_index.cpu().numpy()
+    node_mask = lcc_mask(edge_index, data.num_nodes)
+        
+    if node_mask is None:
+        print('Largest connected component: Full graph')
+        return data
+    print('Largest connected component: {}/{} nodes'.format(node_mask.sum(), data.num_nodes))
+
+    node_indices = -np.ones(data.num_nodes, dtype=int)
+    node_indices[node_mask] = np.arange(node_mask.sum())
+    edge_mask = node_mask[edge_index[0]]
+    edge_index = node_indices[edge_index[:,edge_mask]]
+
+    kwargs = {}
+    for key, val in data.__dict__.items():
+        if val is None:
+            pass
+        elif key == 'x':
+            val = val[node_mask,:]
+        elif key in ['y','train_mask','test_mask','val_mask']:
+            val = val[node_mask]
+        elif key == 'edge_index':
+            val = torch.tensor(edge_index)
+        elif key in ['edge_weight', 'edge_attr']:
+            val = val[edge_mask]
+        kwargs[key] = val
+    return Data(**kwargs)
+
+def lcc_mask(edge_index, num_nodes):
+    edge_index = edge_index[:, np.argsort(edge_index[0])]
+    neighborhoods = np.zeros(num_nodes+1, dtype=int)
+    j = 0
+    for e in range(edge_index.shape[1]):
+        i = edge_index[0, e]
+        while j < i:
+            j += 1
+            neighborhoods[j] = e
+    while j < num_nodes:
+        j += 1
+        neighborhoods[j] = edge_index.shape[1]
+    # now the edge indices e with edge_index[0,e] == j are exactly those in range(neighborhoods[j], neighborhoods[j+1])
+    
+    components = np.zeros(num_nodes, dtype=int)
+    c = 0
+    q = Queue()
+    for start in range(num_nodes):
+        if components[start] != 0:
+            continue
+        c += 1
+        components[start] = c
+        q.put(start)
+        while not q.empty():
+            j = q.get()
+            for k in edge_index[1, neighborhoods[j]:neighborhoods[j+1]]:
+                if components[k] == 0:
+                    components[k] = c
+                    q.put(k)
+
+    if c <= 1:
+        return None
+    c_max = 1+np.argmax([(components == i+1).sum() for i in range(c)])
+    return components == c_max
