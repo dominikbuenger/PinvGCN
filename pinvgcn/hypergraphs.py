@@ -36,13 +36,14 @@ def load_hypergraph_data(name, dir=None):
 
 
 
-class HypergraphPinv(object):
+class HypergraphSpectralSetup(object):
     r"""
-    Class in the style of a torch_geometric transform. Replaces given data 
-    by a new data object holding a representation of the hypergraph Laplacian
-    and providing the apply_pinv method. If rank is not None, a low-rank
-    approximation is used. eig_tol is the tolerance for the SVD. eig_threshold
-    determines which eigenvalues are treated as zero."""
+    Class in the style of a torch_geometric transform. Augments a data object
+    with spectral information ob the hypergraph Laplacian. If `rank` is not 
+    None, a low-rank approximation is used. eig_tol is the tolerance for the 
+    eigenvalue computation. `eig_threshold` determines which eigenvalues are 
+    treated as zero.
+    """
     
     def __init__(self, rank=None, eig_tol=0, eig_threshold=1e-6):
         self.rank = rank
