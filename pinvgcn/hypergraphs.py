@@ -2,12 +2,11 @@
 import numpy as np
 import scipy.sparse as sp
 import os
-from warnings import warn
 
 import torch
-from torch_geometric.data import Data, InMemoryDataset, download_url
+from torch_geometric.data import download_url
 
-from .data import setup_spectral_data
+from .data import setup_spectral_data, SingleSliceDataset
 
 
 def load_hypergraph_data(name, dir=None):
@@ -21,13 +20,10 @@ def load_hypergraph_data(name, dir=None):
     
     if name == 'Mushroom':
         data = MushroomDataset(path).data
-        data.num_classes = 2
     elif name == 'Covertype45':
         data = CovertypeDataset(path, [4,5]).data
-        data.num_classes = 2
     elif name == 'Covertype67':
         data = CovertypeDataset(path, [6,7]).data
-        data.num_classes = 2
     else:
         raise ValueError('Unknown hypergraph dataset name: ' + name)
     
@@ -39,8 +35,8 @@ def load_hypergraph_data(name, dir=None):
 class HypergraphSpectralSetup(object):
     r"""
     Class in the style of a torch_geometric transform. Augments a data object
-    with spectral information ob the hypergraph Laplacian. If `rank` is not 
-    None, a low-rank approximation is used. eig_tol is the tolerance for the 
+    with spectral information on the hypergraph Laplacian. If `rank` is not 
+    None, a low-rank approximation is used. `eig_tol` is the tolerance for the 
     eigenvalue computation. `eig_threshold` determines which eigenvalues are 
     treated as zero.
     """
@@ -60,28 +56,16 @@ class HypergraphSpectralSetup(object):
         return data
 
 
-
-class UCIHypergraphDataset(InMemoryDataset):
-    def __init__(self, root, transform=None, pre_transform=None):
-        super().__init__(root, transform, pre_transform)
-        self.data, self.slices = torch.load(self.processed_paths[0])
-    
-    @property
-    def processed_file_names(self):
-        return 'data.pt'
-
-    def save_processed(self, incidence, labels):
-        data = Data(
-            x = torch.FloatTensor(incidence),
-            y = torch.LongTensor(labels),
-            hyperedge_weight = torch.ones(incidence.shape[1], dtype=torch.float))
+class HypergraphDataset(SingleSliceDataset):
+    def save_hypergraph(self, incidence, labels, weights=None):
+        self.save_processed(
+            x = torch.tensor(incidence, dtype=torch.float),
+            y = torch.tensor(labels, dtype=torch.long),
+            hyperedge_weight = torch.ones(incidence.shape[1], dtype=torch.float) if weights is None else \
+                                torch.tensor(weights, dtype=torch.float),
+            num_classes = labels.max()+1)
         
-        if self.pre_transform is None:
-            data = self.pre_transform(data)
-        torch.save(self.collate([data]), self.processed_paths[0])
-
-
-class MushroomDataset(UCIHypergraphDataset):
+class MushroomDataset(HypergraphDataset):
     r"""Subclass of InMemoryDataset that downloads and processes the Mushroom
     dataset from the UCI website."""
     
@@ -118,11 +102,11 @@ class MushroomDataset(UCIHypergraphDataset):
         incidence = np.array(inc_list, dtype=np.float).T
         print(' - Mushroom incidence shape: {}'.format(incidence.shape))
     
-        self.save_processed(incidence, labels)
+        self.save_hypergraph(incidence, labels)
         
 
 
-class CovertypeDataset(UCIHypergraphDataset):
+class CovertypeDataset(HypergraphDataset):
     r"""Subclass of InMemoryDataset that downloads and processes the Covertype
     dataset from the UCI website. A subset of the data can be used by only 
     using certain classes."""
@@ -183,7 +167,7 @@ class CovertypeDataset(UCIHypergraphDataset):
             
             print(' - Partial incidence shape for classes {}: {}'.format(self.classes, incidence.shape))
             
-        self.save_processed(incidence, labels)
+        self.save_hypergraph(incidence, labels)
 
 
 def normalized_incidence(data):
