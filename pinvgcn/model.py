@@ -30,6 +30,8 @@ def get_coefficient_preset(name, alpha=1, beta=1, gamma=1):
         return [(alpha,beta,gamma)]
     elif name == 'independent-parts':
         return [(alpha,0,0), (0,beta,0),(0,0,gamma)]
+    elif name == 'only-pseudoinverse':
+        return [(0,beta,0)]
     elif name == 'no-zero-impulse':
         return [(0,beta,0), (0,0,gamma)]
     elif name == 'no-high-pass':
@@ -40,6 +42,8 @@ def get_coefficient_preset(name, alpha=1, beta=1, gamma=1):
         return [(alpha,0,gamma), (0,beta,0)]
     elif name == 'independent-high-pass':
         return [(alpha,beta,0), (0,0,gamma)]
+    else:
+        raise ValueError("Unknown coefficient preset: {}".format(name))
 
 
 class ConvBase(torch.nn.Module):
