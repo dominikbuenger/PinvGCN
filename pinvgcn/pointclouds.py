@@ -1,8 +1,9 @@
 
 import numpy as np
 import os
-from zipfile import ZipFile
-
+# from zipfile import ZipFile
+import subprocess
+import shutil
 
 import torch
 from torch_geometric.data import download_url
@@ -69,18 +70,22 @@ class OaklandDataset(SingleSliceDataset):
     """
     
     def __init__(self, root, index, transform=None, pre_transform=None):
+        self.index = index
         super().__init__(root, transform, pre_transform)
         
-        self.index = index
     
     url_base = 'http://www.cs.cmu.edu/~vmr/datasets/oakland_3d/cvpr09/data/'
     zip_names = {
         1: 'training.zip',
         2: 'validation.zip'
     }
-    member_names = {
-        1: 'training\oakland_part3_an_training.xyz_label_conf',
-        2: 'validation\oakland_part3_am.xyz_label_conf'
+    unzipped_dir_names = {
+        1: 'training',
+        2: 'validation'
+    }
+    unzipped_file_names = {
+        1: 'oakland_part3_an_training.xyz_label_conf',
+        2: 'oakland_part3_am.xyz_label_conf'
     }
     
     @property
@@ -90,8 +95,22 @@ class OaklandDataset(SingleSliceDataset):
     def download(self):
         zip_name = self.zip_names[self.index]
         download_url(self.url_base + zip_name, self.raw_dir)
-        with ZipFile(os.path.join(self.raw_dir, zip_name), 'r') as file:
-            file.extract(self.member_names[self.index], self.raw_paths[0])
+        # with ZipFile(os.path.join(self.raw_dir, zip_name), 'r') as file:
+        #     file.extract(self.member_names[self.index], self.raw_paths[0])
+        
+        #extraction with zipfile does not work due to a filesep mismatch
+        process = subprocess.Popen(['unzip', zip_name], cwd=self.raw_dir, stdout=subprocess.PIPE)
+        _, error = process.communicate()
+        if error is not None:
+            os.remove(os.path.join(self.raw_dir, zip_name))
+            shutil.rmtree(os.path.join(self.raw_dir, self.unzipped_dir_names[self.index]), ignore_errors=True)
+            raise RuntimeError('Error while unzipping Oakland data')
+        
+        shutil.move(os.path.join(self.raw_dir, self.unzipped_dir_names[self.index], self.unzipped_file_names[self.index]),
+                    os.path.join(self.raw_paths[0]))
+        
+        os.remove(os.path.join(self.raw_dir, zip_name))
+        shutil.rmtree(os.path.join(self.raw_dir, self.unzipped_dir_names[self.index]))
 
 
     def process(self):
@@ -101,8 +120,7 @@ class OaklandDataset(SingleSliceDataset):
         
         self.save_processed(
             x = torch.tensor(x, dtype=torch.float), 
-            y = torch.tensor(y, dtype=torch.long),
-            num_classes = y.max()+1)
+            y = torch.tensor(y, dtype=torch.long))
 
 
 
