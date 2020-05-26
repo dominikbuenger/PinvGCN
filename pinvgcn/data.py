@@ -6,8 +6,8 @@ import torch
 from torch_geometric.data import Data, InMemoryDataset
         
 def setup_spectral_data(data, w, U, threshold=1e-2, max_rank=None):
-    w = torch.as_tensor(w).flatten()
-    U = torch.as_tensor(U)
+    w = torch.as_tensor(w, dtype=torch.float).flatten()
+    U = torch.as_tensor(U, dtype=torch.float)
     nonzero_mask = w > threshold
     
     data.zero_U = U[:, ~nonzero_mask]
@@ -78,6 +78,7 @@ class SingleSliceDataset(InMemoryDataset):
     def __init__(self, root, transform=None, pre_transform=None):
         super().__init__(root, transform, pre_transform)
         self.data, self.slices = torch.load(self.processed_paths[0])
+        self.data.num_classes = self.num_classes
     
     @property
     def processed_file_names(self):
@@ -86,6 +87,6 @@ class SingleSliceDataset(InMemoryDataset):
     def save_processed(self, **kwargs):
         data = Data(**kwargs)
         
-        if self.pre_transform is None:
+        if self.pre_transform is not None:
             data = self.pre_transform(data)
         torch.save(self.collate([data]), self.processed_paths[0])

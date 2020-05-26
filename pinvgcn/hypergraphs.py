@@ -61,8 +61,7 @@ class HypergraphDataset(SingleSliceDataset):
             x = torch.tensor(incidence, dtype=torch.float),
             y = torch.tensor(labels, dtype=torch.long),
             hyperedge_weight = torch.ones(incidence.shape[1], dtype=torch.float) if weights is None else \
-                                torch.tensor(weights, dtype=torch.float),
-            num_classes = labels.max()+1)
+                                torch.tensor(weights, dtype=torch.float))
         
 class MushroomDataset(HypergraphDataset):
     r"""Subclass of InMemoryDataset that downloads and processes the Mushroom
