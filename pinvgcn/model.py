@@ -47,6 +47,20 @@ def get_coefficient_preset(name, alpha=1, beta=1, gamma=1):
 
 
 
+def get_filter_tensors(coeffs, data):
+    result = []
+    for alpha, beta, gamma in coeffs:
+        s = 0
+        if alpha != 0 or gamma != 0:
+            s += ((alpha - data.eigengap*gamma) * data.zero_U) @ data.zero_U.T
+        if beta != 0 or gamma != 0:
+            s += (data.eigengap*(beta - gamma/data.nonzero_w) * data.nonzero_U) @ data.nonzero_U.T
+        if gamma != 0:
+            s += data.eigengap * gamma * torch.eye(data.num_nodes, data.num_nodes, dtype=torch.float, device=data.nonzero_w.device)
+        result.append(s)
+    return result
+
+
 def print_filter_values(coeffs, data):
     for i, c in enumerate(coeffs):
         alpha, beta, gamma = c
@@ -55,6 +69,7 @@ def print_filter_values(coeffs, data):
         with np.printoptions(precision=3, suppress=True):
             print(" - pseudoinverse part: ", data.eigengap * beta / data.nonzero_w.cpu().numpy())
         print(" - high-pass part: {:.3f}".format(gamma * data.eigengap))
+
 
 
 class ConvBase(torch.nn.Module):
@@ -220,6 +235,10 @@ class PinvGCN(torch.nn.Module):
         basis function. The result can be passed to the network's forward 
         operation.
         """
+        
+        if X is None:
+            return get_filter_tensors(self.coeffs, data)
+        
         zero_U_X = data.zero_U.T @ X
         nonzero_U_X = data.nonzero_U.T @ X
         
