@@ -282,6 +282,8 @@ class PinvGCN(torch.nn.Module):
             optimizer.step()
         return loss.item()
     
+    def predict(self, data, input, mask=slice(None)):
+        return self(data, input)[mask].max(dim=1)[1]
         
     def eval_accuracy(self, data, input):
         r"""Evaluate the accuracy of the trained network on the test set."""
