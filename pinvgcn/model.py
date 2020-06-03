@@ -185,6 +185,9 @@ class PinvGCN(torch.nn.Module):
         self.depth = len(hidden_channels)+1
         self.dropout = None if dropout is None or dropout == 0 else torch.nn.Dropout(dropout)
         self.activation = torch.nn.ReLU(inplace=True)
+        
+        if isinstance(coeffs, str):
+            coeffs = get_coefficient_preset(coeffs)
         self.coeffs = coeffs
         
         if init is None:
