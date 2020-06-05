@@ -6,6 +6,7 @@ import torch
 from time import perf_counter as timer
 
 import pinvgcn
+import pinvgcn.hypergraphs
 
 ### PARSE ARGUMENTS
 
@@ -70,11 +71,11 @@ else:
 
 ### SETUP
 
-data = pinvgcn.load_hypergraph_data(args.dataset, data_dir)
+data = pinvgcn.hypergraphs.load_hypergraph_data(args.dataset, data_dir)
 
 tic = timer()
 
-data = pinvgcn.HypergraphSpectralSetup(rank=args.rank)(data)
+data = pinvgcn.hypergraphs.HypergraphSpectralSetup(rank=args.rank)(data)
 data = data.to(device)
 
 coeffs = pinvgcn.get_coefficient_preset(args.coefficients, alpha=args.alpha, beta=args.beta, gamma=args.gamma)

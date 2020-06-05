@@ -6,6 +6,7 @@ import torch
 from time import perf_counter as timer
 
 import pinvgcn
+import pinvgcn.graphs
 
 ### PARSE ARGUMENTS
 
@@ -72,11 +73,11 @@ else:
 
 ### SETUP
 
-data = pinvgcn.load_graph_data(args.dataset, data_dir, lcc=args.lcc)
+data = pinvgcn.graphs.load_graph_data(args.dataset, data_dir, lcc=args.lcc)
 
 tic = timer()
 
-data = pinvgcn.GraphSpectralSetup(rank=args.rank, loop_weights=args.loops, dense_graph=False)(data)
+data = pinvgcn.graphs.GraphSpectralSetup(rank=args.rank, loop_weights=args.loops, dense_graph=False)(data)
 data = data.to(device)
 
 coeffs = pinvgcn.get_coefficient_preset(args.coefficients, alpha=args.alpha, beta=args.beta, gamma=args.gamma)
