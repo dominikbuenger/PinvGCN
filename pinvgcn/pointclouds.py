@@ -124,15 +124,15 @@ class OaklandDataset(SingleSliceDataset):
 
 
 
-def point_cloud_laplacian_decomposition(x, sigma, num_ev, tol=1e-3, fastadj_setup_name='default'):
+def point_cloud_laplacian_decomposition(x, sigma, num_ev, tol=None, fastadj_setup_name='default'):
     r"""Return a partial eigen decomposition of the Laplacian of a fully 
     connected graph with Gaussian edge weights. The computation is performed
     by the `fastadj` module.
     """
     
-    adj = fastadj.fixed_adjacency_matrix(x, sigma, setup=fastadj_setup_name)
+    adj = fastadj.AdjacencyMatrix(x, sigma, setup=fastadj_setup_name)
 
-    w, U = fastadj.normalized_adjacency_eigs(adj, k=num_ev, tol=tol)
+    w, U = adj.normalized_eigs(num_ev, tol=tol) # tol=None chooses tol according to the fastadj setup
     w = 1 - w
     
     return w, U

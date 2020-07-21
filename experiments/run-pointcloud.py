@@ -6,6 +6,7 @@ import torch
 from time import perf_counter as timer
 
 import pinvgcn
+import pinvgcn.pointclouds
 
 ### PARSE ARGUMENTS
 
