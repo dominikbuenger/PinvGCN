@@ -291,9 +291,10 @@ class PinvGCN(torch.nn.Module):
     def eval_accuracy(self, data, input):
         r"""Evaluate the accuracy of the trained network on the test set."""
         self.eval()
-        _, pred = self(data, input)[data.test_mask].max(dim=1)
-        return float(pred.eq(data.y[data.test_mask]).sum().item()) / data.test_mask.sum().item()
+        correctness = self.predict(data, input, data.test_mask).eq(data.y[data.test_mask])
+        # _, pred = self(data, input)[data.test_mask].max(dim=1)
+        return float(correctness.sum().item()) / data.test_mask.sum().item()
 
 
     def average_absolute_weight_entries(self):
-        return [np.array([np.abs(W.detach().cpu().numpy()).mean() for W in l.weights]) for l in self.layers]
+        return np.array([[np.abs(W.detach().cpu().numpy()).mean() for W in l.weights] for l in self.layers])
