@@ -14,7 +14,8 @@ parser = argparse.ArgumentParser(description='Perform several runs of training a
 
 parser.add_argument('dataset', help='Name of the dataset to be loaded')
 parser.add_argument('sigma', type=float, help='Gaussian shape parameter')
-parser.add_argument('coefficients', help='Name of the coefficient setup')
+parser.add_argument('coefficients', nargs='?', default='independent-parts', 
+    help='Name of the coefficient setup. Default: independent-parts')
 
 parser.add_argument('-a', '--alpha', type=float, default=1, help='Filter shape parameter. Default: 1')
 parser.add_argument('-b', '--beta', type=float, default=1, help='Filter shape parameter. Default: 1')
@@ -46,10 +47,12 @@ parser.add_argument('--no-save', action='store_true', default=False,
     help='Disable saving results')
 parser.add_argument('--no-fixed-seeds', action='store_true', default=False,
     help='Disable fixed seeds. Also implies that the results will not be saved')
-parser.add_argument('--run-print-level', default='results',
-    help='Level of information that is printed after each run. Possible values are "none", "results", and "weights"')
-parser.add_argument('--print-weights', action='store_const', const='weights', dest='run_print_level',
-    help='Equivalent to "--run-print-level weights"')
+parser.add_argument('--track-weights', action='store_true', default=False,
+    help='Keep track of the average entries in the weight matrices for each basis filter function')
+parser.add_argument('--silent-runs', action='store_true', default=False,
+    help='Don''t print a line after each run')
+parser.add_argument('--print-filter-values', action='store_true', default=False,
+    help='Print the values of each filter basis function, evaluated in the computed eigenvalues')
 
 
 args = parser.parse_args()
@@ -80,7 +83,9 @@ data = pinvgcn.pointclouds.PointCloudSpectralSetup(args.sigma, args.rank)(data)
 data = data.to(device)
 
 coeffs = pinvgcn.get_coefficient_preset(args.coefficients, alpha=args.alpha, beta=args.beta, gamma=args.gamma)
-pinvgcn.print_filter_values(coeffs, data)
+
+if args.print_filter_values:
+    pinvgcn.print_filter_values(coeffs, data)
 
 model = pinvgcn.PinvGCN(coeffs, data.num_features, data.num_classes, hidden_channels=args.hidden, 
                         dropout=args.dropout, bias=not args.no_bias)
@@ -96,6 +101,7 @@ print('Setup done in {:.4} seconds'.format(setup_time))
 
 training_times = []
 accuracies = []
+avg_weights = 0
 
 for run in range(args.num_runs):
     if not args.no_fixed_seeds:
@@ -117,15 +123,27 @@ for run in range(args.num_runs):
     acc = model.eval_accuracy(data, input)
     accuracies.append(acc)
     
-    if args.run_print_level == 'results':
-        print('Run {: 4d}/{}: Training time {:.4f} s, accuracy {:.4f} %'.format(run+1, args.num_runs, t, 100*acc))
-    elif args.run_print_level == 'weights':
-        with np.printoptions(precision=3, suppress=True):
-            print('Run {: 4d}/{}: Training time {:.4f} s, accuracy {:.4f} %, avg. abs. weights:'.format(run+1, args.num_runs, t, 100*acc), 
-                ", ".join("L{} {}".format(i+1, ww) for i, ww in enumerate(model.average_absolute_weight_entries())))
+    if args.track_weights:
+        avg_run_weights = model.average_absolute_weight_entries()
+        avg_weights += avg_run_weights
+    
+    if not args.silent_runs:
+        s = 'Run {: 4d}/{}: Training time {:.4f} s, accuracy {:8.4f} %'.format(run+1, args.num_runs, t, 100*acc)
+        if args.track_weights:
+            with np.printoptions(precision=3, suppress=True):
+                s += ', avg. abs. weights: ' + ', '.join('L{} {}'.format(i+1, ww) for i, ww in enumerate(avg_run_weights))
+        print(s)
 
 print('###')
 pinvgcn.print_results(accuracies, setup_time, training_times)
+
+if args.track_weights:
+    avg_weights /= args.num_runs
+    with np.printoptions(precision=3, suppress=True):
+        weights_str = ', '.join('Layer {} {}'.format(i+1, ww) for i, ww in enumerate(avg_weights)) \
+                    + ', Combined {}'.format(avg_weights.mean(axis=0))
+    print(' - Average absolute weight entries:', weights_str)
+    
 print('###')
 
 
@@ -153,5 +171,7 @@ if not args.no_save:
     pinvgcn.save_results(
         results_dir, dataset_name, architecture_name,
         accuracies, setup_time, training_times,
-        args.__dict__, file=__file__)
+        args.__dict__, 
+        {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked'},
+        file=__file__)
     
