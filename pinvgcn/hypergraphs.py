@@ -38,6 +38,8 @@ class HypergraphSpectralSetup(object):
     None, a low-rank approximation is used. `eig_tol` is the tolerance for the 
     eigenvalue computation. `eig_threshold` determines which eigenvalues are 
     treated as zero.
+    This function currently expects the hypergraph incidence to be stored in
+    data.x as a dense tensor.
     """
     
     def __init__(self, rank=None, eig_tol=0, eig_threshold=1e-6):
@@ -169,7 +171,7 @@ class CovertypeDataset(HypergraphDataset):
 
 
 def normalized_incidence(data):
-    r"""Compute a numpy array holding D^{-1/2} H W^{1/2} D^{-1/2}, where H is 
+    r"""Compute a numpy array holding D^{-1/2} H W^{1/2} B^{-1/2}, where H is 
     the hypergraph incidence matrix given by data.x, D is the diagonal node
     degree matrix, B is the diagonal hyperedge degree matrix, and W is the
     optional diagonal hyperedge weight matrix given by data.hyperedge_weight.
