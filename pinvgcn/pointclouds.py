@@ -46,15 +46,16 @@ class PointCloudSpectralSetup(object):
     possible values are `'default'`, `'rough'`, and `'fine'`).
     """
     
-    def __init__(self, sigma, rank, eig_tol=1e-3, eig_threshold=1e-2, fastadj_setup_name='default'):
+    def __init__(self, sigma, rank, loop_weights=None, eig_tol=1e-3, eig_threshold=1e-2, fastadj_setup_name='default'):
         self.sigma = sigma
         self.rank = rank
+        self.loop_weights = loop_weights
         self.eig_tol = eig_tol
         self.eig_threshold = eig_threshold
         self.fastadj_setup_name = fastadj_setup_name
 
     def __call__(self, data):
-        w, U = point_cloud_laplacian_decomposition(data.x.cpu().numpy(), self.sigma, self.rank+1,
+        w, U = point_cloud_laplacian_decomposition(data.x.cpu().numpy(), self.sigma, self.rank+1, self.loop_weights,
                                                    tol = self.eig_tol, fastadj_setup_name = self.fastadj_setup_name)
         
         setup_spectral_data(data, w, U, threshold=self.eig_threshold)
@@ -124,13 +125,14 @@ class OaklandDataset(SingleSliceDataset):
 
 
 
-def point_cloud_laplacian_decomposition(x, sigma, num_ev, tol=None, fastadj_setup_name='default'):
+def point_cloud_laplacian_decomposition(x, sigma, num_ev, loop_weights=None, tol=None, fastadj_setup_name='default'):
     r"""Return a partial eigen decomposition of the Laplacian of a fully 
     connected graph with Gaussian edge weights. The computation is performed
     by the `fastadj` module.
     """
     
-    adj = fastadj.AdjacencyMatrix(x, sigma, setup=fastadj_setup_name)
+    adj = fastadj.AdjacencyMatrix(x, sigma, setup=fastadj_setup_name, 
+                                  diagonal = 0.0 if loop_weights is None else loop_weights)
 
     w, U = adj.normalized_eigs(num_ev, tol=tol) # tol=None chooses tol according to the fastadj setup
     w = 1 - w

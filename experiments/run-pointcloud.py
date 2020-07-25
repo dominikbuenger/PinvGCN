@@ -79,7 +79,7 @@ data = pinvgcn.pointclouds.load_point_cloud_data(args.dataset, data_dir)
 
 tic = timer()
 
-data = pinvgcn.pointclouds.PointCloudSpectralSetup(args.sigma, args.rank)(data)
+data = pinvgcn.pointclouds.PointCloudSpectralSetup(args.sigma, args.rank, loop_weights=args.loops)(data)
 data = data.to(device)
 
 coeffs = pinvgcn.get_coefficient_preset(args.coefficients, alpha=args.alpha, beta=args.beta, gamma=args.gamma)
