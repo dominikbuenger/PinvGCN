@@ -54,6 +54,8 @@ parser.add_argument('--silent-runs', action='store_true', default=False,
     help='Don''t print a line after each run')
 parser.add_argument('--print-filter-values', action='store_true', default=False,
     help='Print the values of each filter basis function, evaluated in the computed eigenvalues')
+parser.add_argument('--repeat-setup', action='store_true', default=False,
+    help='In each run, repeat the setup process')
 
 
 args = parser.parse_args()
@@ -80,8 +82,12 @@ data = pinvgcn.graphs.load_graph_data(args.dataset, data_dir, lcc=args.lcc)
 
 tic = timer()
 
-data = pinvgcn.graphs.GraphSpectralSetup(rank=args.rank, loop_weights=args.loops, dense_graph=False)(data)
-data = data.to(device)
+setup_transform = pinvgcn.graphs.GraphSpectralSetup(rank=args.rank, loop_weights=args.loops, dense_graph=False)
+if args.repeat_setup:
+    orig_data = data
+else:
+    data = setup_transform(data)
+    data = data.to(device)
 
 coeffs = pinvgcn.get_coefficient_preset(args.coefficients, alpha=args.alpha, beta=args.beta, gamma=args.gamma)
 
@@ -100,6 +106,8 @@ print('Setup done in {:.4} seconds'.format(setup_time))
 
 ### EXPERIMENT RUNS
 
+if args.repeat_setup:
+    setup_times = []
 training_times = []
 accuracies = []
 avg_weights = 0
@@ -110,6 +118,16 @@ for run in range(args.num_runs):
     
     pinvgcn.random_split(data, args.split_size)
 
+    if args.repeat_setup:
+        tic = timer()
+        
+        data = setup_transform(orig_data)
+        data = data.to(device)
+        
+        t0 = timer() - tic
+        setup_times.append(setup_time + t0)
+        
+        
     tic = timer()
     
     model.reset_parameters()
@@ -129,14 +147,17 @@ for run in range(args.num_runs):
         avg_weights += avg_run_weights
     
     if not args.silent_runs:
-        s = 'Run {: 4d}/{}: Training time {:.4f} s, accuracy {:8.4f} %'.format(run+1, args.num_runs, t, 100*acc)
+        s = 'Run {: 4d}/{}: '.format(run+1, args.num_runs)
+        if args.repeat_setup:
+            s += 'Additional setup time {:.4f} s, '.format(t0)
+        s += 'Training time {:.4f} s, accuracy {:8.4f} %'.format(t, 100*acc)
         if args.track_weights:
             with np.printoptions(precision=3, suppress=True):
                 s += ', avg. abs. weights: ' + ', '.join('L{} {}'.format(i+1, ww) for i, ww in enumerate(avg_run_weights))
         print(s)
 
 print('###')
-pinvgcn.print_results(accuracies, setup_time, training_times)
+pinvgcn.print_results(accuracies, setup_times if args.repeat_setup else setup_time, training_times)
 
 if args.track_weights:
     avg_weights /= args.num_runs
@@ -171,7 +192,7 @@ if not args.no_save:
     
     pinvgcn.save_results(
         results_dir, dataset_name, architecture_name,
-        accuracies, setup_time, training_times,
+        accuracies, setup_times if args.repeat_setup else setup_time, training_times,
         args.__dict__, 
         {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked'},
         file=__file__)
