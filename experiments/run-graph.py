@@ -112,55 +112,65 @@ training_times = []
 accuracies = []
 avg_weights = 0
 
-for run in range(args.num_runs):
-    if not args.no_fixed_seeds:
-        pinvgcn.set_seed(run)
+try:
+    for run in range(num_runs):
+        if not args.no_fixed_seeds:
+            pinvgcn.set_seed(run)
+        
+        pinvgcn.random_split(data, args.split_size)
     
-    pinvgcn.random_split(data, args.split_size)
-
-    if args.repeat_setup:
+        if args.repeat_setup:
+            tic = timer()
+            
+            data = setup_transform(orig_data)
+            data = data.to(device)
+            
+            t0 = timer() - tic
+            setup_times.append(setup_time + t0)
+            
+            
         tic = timer()
         
-        data = setup_transform(orig_data)
-        data = data.to(device)
+        model.reset_parameters()
         
-        t0 = timer() - tic
-        setup_times.append(setup_time + t0)
+        input = model.preconvolve_input(data, data.x)
         
+        model.run_training(data, input, optimizer, num_epochs=args.epochs)
         
-    tic = timer()
+        t = timer() - tic
+        training_times.append(t)
     
-    model.reset_parameters()
-    
-    input = model.preconvolve_input(data, data.x)
-    
-    model.run_training(data, input, optimizer, num_epochs=args.epochs)
-    
-    t = timer() - tic
-    training_times.append(t)
-
-    acc = model.eval_accuracy(data, input)
-    accuracies.append(acc)
-    
-    if args.track_weights:
-        avg_run_weights = model.average_absolute_weight_entries()
-        avg_weights += avg_run_weights
-    
-    if not args.silent_runs:
-        s = 'Run {: 4d}/{}: '.format(run+1, args.num_runs)
-        if args.repeat_setup:
-            s += 'Additional setup time {:.4f} s, '.format(t0)
-        s += 'Training time {:.4f} s, accuracy {:8.4f} %'.format(t, 100*acc)
+        acc = model.eval_accuracy(data, input)
+        accuracies.append(acc)
+        
         if args.track_weights:
-            with np.printoptions(precision=3, suppress=True):
-                s += ', avg. abs. weights: ' + ', '.join('L{} {}'.format(i+1, ww) for i, ww in enumerate(avg_run_weights))
-        print(s)
+            avg_run_weights = model.average_absolute_weight_entries()
+            avg_weights += avg_run_weights
+        
+        if not args.silent_runs:
+            s = 'Run {: 4d}/{}: '.format(run+1, args.num_runs)
+            if args.repeat_setup:
+                s += 'Additional setup time {:.4f} s, '.format(t0)
+            s += 'Training time {:.4f} s, accuracy {:8.4f} %'.format(t, 100*acc)
+            if args.track_weights:
+                with np.printoptions(precision=3, suppress=True):
+                    s += ', avg. abs. weights: ' + ', '.join('L{} {}'.format(i+1, ww) for i, ww in enumerate(avg_run_weights))
+            print(s)
+            
+except KeyboardInterrupt:
+    print("Experiment stopped early due to KeyboardInterrupt.")
+    if len(accuracies) == 0:
+        raise
+    status = 'KeyboardInterrupt'
+else:
+    status = 'Finished'
+    
 
 print('###')
 pinvgcn.print_results(accuracies, setup_times if args.repeat_setup else setup_time, training_times)
 
 if args.track_weights:
-    avg_weights /= args.num_runs
+    avg_weights /= len(accuracies)
     with np.printoptions(precision=3, suppress=True):
         weights_str = ', '.join('Layer {} {}'.format(i+1, ww) for i, ww in enumerate(avg_weights)) \
                     + ', Combined {}'.format(avg_weights.mean(axis=0))
@@ -195,5 +205,5 @@ if not args.no_save:
         accuracies, setup_times if args.repeat_setup else setup_time, training_times,
         args.__dict__, 
         {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked'},
-        file=__file__)
-    
+        status = status, file = __file__)
+
