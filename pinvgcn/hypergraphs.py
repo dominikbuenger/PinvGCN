@@ -195,12 +195,12 @@ def hypergraph_laplacian_decomposition(inc, num_ev=None, tol=0):
     parameter tol is used for scipy.linalg.svds (if it is called)."""
     
     # TODO: get better heuristic of when to choose SVDS over SVD
-    if num_ev is None or num_ev > inc.shape[1]/2:
-        U, sigma, _ = np.linalg.svd(inc, full_matrices=False)
-        if num_ev is not None:
-            U = U[:,:num_ev]
-            sigma = sigma[:num_ev]
-    else:
-        U, sigma, _ = sp.linalg.svds(inc, num_ev, tol=tol)
+    # if num_ev is None or num_ev > inc.shape[1]/3:
+    U, sigma, _ = np.linalg.svd(inc, full_matrices=False)
+    if num_ev is not None:
+        U = U[:,:num_ev]
+        sigma = sigma[:num_ev]
+    # else:
+    #     U, sigma, _ = sp.linalg.svds(inc, num_ev, tol=tol)
         
     return 1 - sigma.astype(np.float32)**2, U.astype(np.float32)
