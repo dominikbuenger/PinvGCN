@@ -113,7 +113,7 @@ accuracies = []
 avg_weights = 0
 
 try:
-    for run in range(num_runs):
+    for run in range(args.num_runs):
         if not args.no_fixed_seeds:
             pinvgcn.set_seed(run)
         
