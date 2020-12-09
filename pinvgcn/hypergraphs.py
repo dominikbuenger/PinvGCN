@@ -35,22 +35,26 @@ class HypergraphSpectralSetup(object):
     r"""
     Class in the style of a torch_geometric transform. Augments a data object
     with spectral information on the hypergraph Laplacian. If `rank` is not 
-    None, a low-rank approximation is used. `eig_tol` is the tolerance for the 
-    eigenvalue computation. `eig_threshold` determines which eigenvalues are 
-    treated as zero.
+    None, a low-rank approximation is used. If `partial_eigs` is True,
+    only the relevant eigenvalues are computed, which might negatively impact
+    runtime for small systems. In the partial case, `eig_tol` is the tolerance
+    for the eigenvalue computation. `eig_threshold` determines which 
+    eigenvalues are treated as zero.
     This function currently expects the hypergraph incidence to be stored in
     data.x as a dense tensor.
     """
     
-    def __init__(self, rank=None, eig_tol=0, eig_threshold=1e-6):
+    def __init__(self, rank=None, eig_tol=0, eig_threshold=1e-6, partial_eigs=False):
         self.rank = rank
         self.eig_tol = eig_tol
         self.eig_threshold = eig_threshold
+        self.partial_eigs = partial_eigs
         
     def __call__(self, data):
         inc = normalized_incidence(data)
     
-        w, U = hypergraph_laplacian_decomposition(inc, num_ev=None if self.rank is None else self.rank+1, tol=self.eig_tol)
+        w, U = hypergraph_laplacian_decomposition(inc, num_ev=None if self.rank is None else self.rank+1, 
+                                                  partial_svd=self.partial_eigs, partial_tol=self.eig_tol)
     
         setup_spectral_data(data, w, U, threshold=self.eig_threshold, max_rank=self.rank)
     
@@ -189,18 +193,19 @@ def normalized_incidence(data):
     b = np.sqrt(weights / b)
     return d * inc * b
 
-def hypergraph_laplacian_decomposition(inc, num_ev=None, tol=0):
+def hypergraph_laplacian_decomposition(inc, num_ev=None, partial_svd=False, partial_tol=0):
     r"""Return a (partial) eigen decomposition of the hypergraph Laplacian. If
-    num_ev is not None, only that many smallest eigenvalues are computed. The 
-    parameter tol is used for scipy.linalg.svds (if it is called)."""
+    num_ev is not None, only that many smallest eigenvalues are computed. If 
+    partial_svd is True, only a partial SVD is computed via scipy.linalg.svds
+    with tolerance given by the parameter partial_tol."""
     
     # TODO: get better heuristic of when to choose SVDS over SVD
-    # if num_ev is None or num_ev > inc.shape[1]/3:
-    U, sigma, _ = np.linalg.svd(inc, full_matrices=False)
-    if num_ev is not None:
-        U = U[:,:num_ev]
-        sigma = sigma[:num_ev]
-    # else:
-    #     U, sigma, _ = sp.linalg.svds(inc, num_ev, tol=tol)
+    if partial_svd and num_ev is not None:
+        U, sigma, _ = sp.linalg.svds(inc, num_ev, tol=partial_tol)
+    else:
+        U, sigma, _ = np.linalg.svd(inc, full_matrices=False)
+        if num_ev is not None:
+            U = U[:,:num_ev]
+            sigma = sigma[:num_ev]
         
     return 1 - sigma.astype(np.float32)**2, U.astype(np.float32)
