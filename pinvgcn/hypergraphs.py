@@ -2,14 +2,17 @@
 import numpy as np
 import scipy.sparse as sp
 import os
+import shutil
+import pickle
 
 import torch
 from torch_geometric.data import download_url
+from urllib.error import HTTPError
 
 from .data import setup_spectral_data, SingleSliceDataset
 
 
-def load_hypergraph_data(name, dir):
+def load_hypergraph_data(name, dir, categorical_regularization = 0):
     r"""Load a hypergraph dataset and return its Data object. Currently
     supported dataset names are Mushroom, Covertype45, and Covertype67. Upon
     first usage, data is downloaded from the UCI website and then processed to
@@ -23,10 +26,18 @@ def load_hypergraph_data(name, dir):
         data = CovertypeDataset(path, [4,5]).data
     elif name == 'Covertype67':
         data = CovertypeDataset(path, [6,7]).data
+    elif name.endswith("-Coauthorship"):
+        data = CitationHypergraphDataset(path, "Coauthorship", name[:-13]).data
+    elif name.endswith("-Cocitation"):
+        data = CitationHypergraphDataset(path, "Cocitation", name[:-11]).data
     else:
         raise ValueError('Unknown hypergraph dataset name: ' + name)
     
     data.name = name
+    
+    if categorical_regularization > 0:
+        regularize_with_categorical_features(data, categorical_regularization)
+    
     return data
 
 
@@ -51,7 +62,7 @@ class HypergraphSpectralSetup(object):
         self.partial_eigs = partial_eigs
         
     def __call__(self, data):
-        inc = normalized_incidence(data)
+        inc = normalized_incidence(data, sparse=self.partial_eigs)
     
         w, U = hypergraph_laplacian_decomposition(inc, num_ev=None if self.rank is None else self.rank+1, 
                                                   partial_svd=self.partial_eigs, partial_tol=self.eig_tol)
@@ -62,12 +73,15 @@ class HypergraphSpectralSetup(object):
 
 
 class HypergraphDataset(SingleSliceDataset):
-    def save_hypergraph(self, incidence, labels, weights=None):
+    def save_hypergraph(self, x, y, hyperedge_index=None, hyperedge_weight=None, **kwargs):
         self.save_processed(
-            x = torch.tensor(incidence, dtype=torch.float),
-            y = torch.tensor(labels, dtype=torch.long),
-            hyperedge_weight = torch.ones(incidence.shape[1], dtype=torch.float) if weights is None else \
-                                torch.tensor(weights, dtype=torch.float))
+            x = torch.as_tensor(x, dtype=torch.float),
+            y = torch.as_tensor(y, dtype=torch.long),
+            hyperedge_index = None if hyperedge_index is None else \
+                torch.as_tensor(hyperedge_index, dtype=torch.long),
+            hyperedge_weight = None if hyperedge_weight is None else \
+                torch.as_tensor(hyperedge_weight, dtype=torch.float),
+            **{k: torch.as_tensor(v) for k, v in kwargs.items()})
         
 class MushroomDataset(HypergraphDataset):
     r"""Subclass of InMemoryDataset that downloads and processes the Mushroom
@@ -174,24 +188,124 @@ class CovertypeDataset(HypergraphDataset):
         self.save_hypergraph(incidence, labels)
 
 
-def normalized_incidence(data):
+class CitationHypergraphDataset(HypergraphDataset):
+    
+    def __init__(self, root, network_type="Coauthorship", dataset="Cora", transform=None, pre_transform=None):
+        self.network_type = network_type.lower()
+        self.dataset = dataset.lower()
+        super().__init__(root, transform, pre_transform)
+    
+    @property
+    def url_base(self):
+        return 'https://github.com/malllabiisc/HyperGCN/raw/master/data/{}/{}/'.format(self.network_type, self.dataset)
+    
+    @property
+    def raw_file_names(self):
+        return ["features.pickle", "labels.pickle", "hypergraph.pickle"] + \
+            ["split{}.pickle".format(i) for i in range(1,11)]
+    
+    def download(self):
+        try:
+            for file_name in self.raw_file_names:
+                is_split = file_name.startswith("split")
+                download_url(self.url_base + ("splits/" + file_name[5:] if is_split else file_name), self.raw_dir)
+                if is_split:
+                    os.replace(os.path.join(self.raw_dir, file_name[5:]),
+                               os.path.join(self.raw_dir, file_name))
+                    
+        except HTTPError as e:
+            if e.code == 404:
+                # there likely was a typo, so remove the whole root
+                shutil.rmtree(self.root) 
+                raise ValueError("Did not find {} dataset {} at {}".format(
+                    self.network_type, self.dataset, e.filename)) from e
+            else:
+                raise
+            
+    def process(self):
+        
+        def load(obj_name):
+            with open(os.path.join(self.raw_dir, obj_name + ".pickle"), "rb") as f:
+                return pickle.load(f)
+        
+        features = load("features").toarray()
+        labels = np.array(load("labels"))
+        
+        hyperedge_dict = load("hypergraph")
+        hyperedge_index = np.hstack([np.vstack(([e] * len(nodes), list(nodes)))
+                                     for e, nodes in enumerate(hyperedge_dict.values())])
+        num_hyperedges = len(hyperedge_dict)
+        hyperedge_weight = np.ones(num_hyperedges)
+        
+        train_index_sets = torch.tensor([load("split{}".format(i))['train'] for i in range(1,11)],
+                                        dtype=torch.long)
+        
+        self.save_hypergraph(features, labels, hyperedge_index, hyperedge_weight,
+                             train_index_sets = train_index_sets)
+
+def regularize_with_categorical_features(data, weight=1):
+    
+    assert 'hyperedge_index' in data, ValueError("Regularization with categorical features currently only works if the hypergraph is given in sparse form")
+    
+    parts = [data.hyperedge_index]
+    num_hyperedges = data.hyperedge_index[0].max().item() + 1
+    
+    if 'hyperedge_weight' not in data and weight != 1:
+        data.hyperedge_weight = torch.ones(num_hyperedges, dtype=torch.float)
+    
+    for i in range(data.x.shape[1]):
+        node_indices = torch.nonzero(data.x[:,i], as_tuple=True)[0]
+        if len(node_indices) > 1:
+            parts.append(torch.cat((torch.tensor([[num_hyperedges]*len(node_indices)], dtype=torch.long),
+                                    node_indices.reshape(1,-1)), dim=0))
+            num_hyperedges += 1
+    
+    if len(parts) > 1:
+        data.hyperedge_index = torch.cat(parts, dim=1)
+        
+        if 'hyperedge_weight' in data:
+            data.hyperedge_weight = torch.cat((data.hyperedge_weight,
+                                               weight*torch.ones(num_hyperedges - len(data.hyperedge_weight),
+                                                                 dtype=torch.float)))
+        
+
+def normalized_incidence(data, sparse=False):
     r"""Compute a numpy array holding D^{-1/2} H W^{1/2} B^{-1/2}, where H is 
-    the hypergraph incidence matrix given by data.x, D is the diagonal node
+    the hypergraph incidence matrix. If data.hyperedge_index is given, it is
+    
+    given by data.x, D is the diagonal node
     degree matrix, B is the diagonal hyperedge degree matrix, and W is the
     optional diagonal hyperedge weight matrix given by data.hyperedge_weight.
     """
-    # TODO: check for other sources of incidence in data, e.g., hyperedge_index
-    inc = data.x.cpu().numpy()
+    
+    if 'hyperedge_index' in data:
+        col, row = data.hyperedge_index.cpu().numpy()
+        inc = sp.coo_matrix((np.ones(row.size), (row,col)), shape=(data.num_nodes, col.max()+1))
+        if not sparse:
+            inc = inc.toarray()
+    else:
+        # assume that data.x contains the dense incidence matrix
+        inc = data.x.cpu().numpy()
+        if sparse:
+            inc = sp.coo_matrix(inc)
+        
     if 'hyperedge_weight' in data:
         weights = data.hyperedge_weight.cpu().numpy()
     else:
         weights = np.ones(inc.shape[1], dtype=np.float)
     
     d = inc @ weights
-    d = 1/np.sqrt(d[:,np.newaxis])
+    d_mask = d > 1e-4
+    d[d_mask] = 1/np.sqrt(d[d_mask])
     b = np.ones(inc.shape[0]) @ inc
     b = np.sqrt(weights / b)
-    return d * inc * b
+    
+    if sparse:
+        for i in range(inc.nnz):
+            inc.data[i] *= d[inc.row[i]] * b[inc.col[i]]
+        return inc.tocsr()
+    else:
+        return d[:,np.newaxis] * inc * b
 
 def hypergraph_laplacian_decomposition(inc, num_ev=None, partial_svd=False, partial_tol=0):
     r"""Return a (partial) eigen decomposition of the hypergraph Laplacian. If
