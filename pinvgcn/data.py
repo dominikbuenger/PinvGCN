@@ -13,11 +13,12 @@ def setup_spectral_data(data, w, U, threshold=1e-2, max_rank=None):
     data.zero_U = U[:, ~nonzero_mask]
     data.nonzero_U = U[:, nonzero_mask]
     data.nonzero_w = w[nonzero_mask]
-    data.eigengap = data.nonzero_w.min().item()
+    data.eigengap = data.nonzero_w.min().item() if nonzero_mask.sum() > 0 else 0.0
     
     zero_mult = data.zero_U.shape[1]
     if zero_mult != 1:
-        warn("Multiplicity of Laplacian eigenvalue 0 is {} instead of expected 1".format(zero_mult))
+        warn("Multiplicity of Laplacian eigenvalue 0 is {} instead of expected 1".format(zero_mult),
+             stacklevel=2)
     
     data.nonzero_w, ind = torch.sort(data.nonzero_w)
     data.nonzero_U = data.nonzero_U[:, ind]
@@ -41,6 +42,13 @@ def random_split(data, split_size=None):
         data.train_mask[ind] = True
     data.test_mask = ~data.train_mask
 
+
+def fixed_split(data, index=0):
+    assert "train_index_sets" in data, \
+        ValueError("pinvgcn.data.fixed_split is only usable for data with train_index_sets field")
+    data.train_mask = None
+    data.train_idx = data.train_index_sets[index % data.train_index_sets.shape[0]]
+    check_masks(data)
 
 
 def check_masks(data):
