@@ -4,6 +4,7 @@ import numpy as np
 import os
 import torch
 from time import perf_counter as timer
+from datetime import datetime
 
 import pinvgcn
 import pinvgcn.graphs
@@ -22,13 +23,15 @@ parser.add_argument('-c', '--gamma', type=float, default=1, help='Filter shape p
 
 parser.add_argument('--lcc', action='store_true', default=False,
     help='Use the largest connected component of the dataset')
+parser.add_argument('--precompute-U0', action='store_true', default=False,
+    help='Compute the graph''s connected components to accelerate eigenvalue computation')
 parser.add_argument('-n', '--num-runs', default=1, type=int, metavar='N',
     help='Number of runs to be performed')
 parser.add_argument('-s', '--split-size', type=int, default=None, metavar='S',
     help="Randomly split the nodes into training and test set using S training samples per class")
 parser.add_argument('-r', '--rank', type=int, default=None, metavar='R',
     help='Perform a low-rank approximation with this target rank')
-parser.add_argument('-l', '--loops', type=float, default=0.0, metavar='WEIGHT',
+parser.add_argument('-l', '--loops', type=float, default=0.0, nargs='?', const=1.0, metavar='WEIGHT',
     help='Add self loop edges with the given weight. If loops are already present, their weight is increased')
 parser.add_argument('--hidden', nargs='*', type=int, default=[32], metavar='H', 
     help='Hidden layer widths')
@@ -60,6 +63,8 @@ parser.add_argument('--repeat-setup', action='store_true', default=False,
 
 args = parser.parse_args()
 
+start_time = datetime.now()
+
 
 ### PREPARATIONS
 
@@ -82,7 +87,8 @@ data = pinvgcn.graphs.load_graph_data(args.dataset, data_dir, lcc=args.lcc)
 
 tic = timer()
 
-setup_transform = pinvgcn.graphs.GraphSpectralSetup(rank=args.rank, loop_weights=args.loops, dense_graph=False)
+setup_transform = pinvgcn.graphs.GraphSpectralSetup(rank=args.rank, loop_weights=args.loops, dense_graph=False, 
+                                                    precompute_U0=args.precompute_U0)
 if args.repeat_setup:
     orig_data = data
 else:
@@ -117,7 +123,8 @@ try:
         if not args.no_fixed_seeds:
             pinvgcn.set_seed(run)
         
-        pinvgcn.random_split(data, args.split_size)
+        if args.split_size is not None:
+            pinvgcn.random_split(data, args.split_size)
     
         if args.repeat_setup:
             tic = timer()
@@ -204,6 +211,9 @@ if not args.no_save:
         results_dir, dataset_name, architecture_name,
         accuracies, setup_times if args.repeat_setup else setup_time, training_times,
         args.__dict__, 
-        {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked'},
+        {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked',
+         'Start time': start_time.strftime("%b %d, %Y, %H:%M:%S"),
+         'End time': datetime.now().strftime("%b %d, %Y, %H:%M:%S")
+        },
         status = status, file = __file__)
 
