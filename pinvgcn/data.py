@@ -5,7 +5,7 @@ from warnings import warn
 import torch
 from torch_geometric.data import Data, InMemoryDataset
         
-def setup_spectral_data(data, w, U, threshold=1e-2, max_rank=None):
+def setup_spectral_data(data, w, U, threshold=1e-2, max_rank=None, check_zero_multiplicity=True):
     w = torch.as_tensor(w, dtype=torch.float).flatten()
     U = torch.as_tensor(U, dtype=torch.float)
     nonzero_mask = w > threshold
@@ -15,10 +15,10 @@ def setup_spectral_data(data, w, U, threshold=1e-2, max_rank=None):
     data.nonzero_w = w[nonzero_mask]
     data.eigengap = data.nonzero_w.min().item() if nonzero_mask.sum() > 0 else 0.0
     
-    zero_mult = data.zero_U.shape[1]
-    if zero_mult != 1:
-        warn("Multiplicity of Laplacian eigenvalue 0 is {} instead of expected 1".format(zero_mult),
-             stacklevel=2)
+    # if check_zero_multiplicity:
+    #     zero_mult = data.zero_U.shape[1]
+    #     if zero_mult != 1:
+    #         print("setup_spectral_data: Multiplicity of Laplacian eigenvalue 0 is {} instead of expected 1".format(zero_mult))
     
     data.nonzero_w, ind = torch.sort(data.nonzero_w)
     data.nonzero_U = data.nonzero_U[:, ind]
