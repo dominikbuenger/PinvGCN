@@ -4,6 +4,7 @@ import numpy as np
 import os
 import torch
 from time import perf_counter as timer
+from datetime import datetime
 
 import pinvgcn
 import pinvgcn.pointclouds
@@ -58,6 +59,7 @@ parser.add_argument('--repeat-setup', action='store_true', default=False,
 
 args = parser.parse_args()
 
+start_time = datetime.now()
 
 ### PREPARATIONS
 
@@ -201,6 +203,9 @@ if not args.no_save:
         results_dir, dataset_name, architecture_name,
         accuracies, setup_times if args.repeat_setup else setup_time, training_times,
         args.__dict__, 
-        {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked'},
+        {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked',
+         'Start time': start_time.strftime("%b %d, %Y, %H:%M:%S"),
+         'End time': datetime.now().strftime("%b %d, %Y, %H:%M:%S")
+        },
         status = status, file = __file__)
 
