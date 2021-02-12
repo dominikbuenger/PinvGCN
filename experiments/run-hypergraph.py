@@ -4,6 +4,7 @@ import os
 import numpy as np
 import torch
 from time import perf_counter as timer
+from datetime import datetime
 
 import pinvgcn
 import pinvgcn.hypergraphs
@@ -24,10 +25,16 @@ parser.add_argument('-n', '--num-runs', default=1, type=int, metavar='N',
     help='Number of runs to be performed')
 parser.add_argument('-s', '--split-size', type=int, default=None, metavar='S',
     help="Randomly split the nodes into training and test set using S training samples per class")
+parser.add_argument('-f', '--fixed-splits', action='store_true', default=False,
+    help="Use the fixed splits given with the data")
+parser.add_argument('-R', '--categorical-regularization', type=float, default=0.0, nargs='?', const=1.0, metavar='FACTOR',
+    help="Add new hyperedges based on the categorical node features")
 parser.add_argument('-r', '--rank', type=int, default=None, metavar='R',
     help='Perform a low-rank approximation with this target rank')
 parser.add_argument('-l', '--loops', type=float, default=0.0, metavar='WEIGHT',
     help='Add self loop edges with the given weight. If loops are already present, their weight is increased')
+parser.add_argument('--partial-eigs', action='store_true', default=False,
+    help='Only compute the required number of eigenvalues instead of a full decomposition')
 parser.add_argument('--hidden', nargs='*', type=int, default=[32], metavar='H', 
     help='Hidden layer widths')
 parser.add_argument('--dropout', type=float, default=0.5, metavar='RATE',
@@ -58,6 +65,8 @@ parser.add_argument('--repeat-setup', action='store_true', default=False,
 
 args = parser.parse_args()
 
+start_time = datetime.now()
+
 
 ### PREPARATIONS
 
@@ -76,15 +85,25 @@ else:
 
 ### SETUP
 
-data = pinvgcn.hypergraphs.load_hypergraph_data(args.dataset, data_dir)
+data = pinvgcn.hypergraphs.load_hypergraph_data(args.dataset, data_dir, 
+                                                categorical_regularization=args.categorical_regularization)
+
+# print("Number of nodes: {}".format(data.x.shape[0]))
+# print("Number of hyperedges: {}".format(data.hyperedge_index[0].max().item()+1))
+# print("Incidence nonzeros: {}".format(data.hyperedge_index.shape[1]))
+# print("Average hyperedge weight: {}".format(data.hyperedge_weight.mean().item()))
 
 tic = timer()
 
-setup_transform = pinvgcn.hypergraphs.HypergraphSpectralSetup(rank=args.rank)
+setup_transform = pinvgcn.hypergraphs.HypergraphSpectralSetup(rank=args.rank, 
+                                                              partial_eigs=args.partial_eigs,
+                                                              eig_tol=1e-3)
 if args.repeat_setup:
     orig_data = data
 else:
     data = setup_transform(data)
+    print("Computed {} nonzero eigenvalues between {:.4f} and {:.4f}".format(
+        data.nonzero_w.shape[0], data.nonzero_w.min().item(), data.nonzero_w.max().item()))
     data = data.to(device)
 
 coeffs = pinvgcn.get_coefficient_preset(args.coefficients, alpha=args.alpha, beta=args.beta, gamma=args.gamma)
@@ -115,7 +134,10 @@ try:
         if not args.no_fixed_seeds:
             pinvgcn.set_seed(run)
         
-        pinvgcn.random_split(data, args.split_size)
+        if args.split_size:
+            pinvgcn.random_split(data, args.split_size)
+        elif args.fixed_splits:
+            pinvgcn.fixed_split(data, run)
     
         if args.repeat_setup:
             tic = timer()
@@ -184,8 +206,14 @@ if not args.no_save:
     results_dir = os.path.join(base_dir, 'results', 'hypergraphs')
     
     dataset_name = data.name if 'name' in data else args.dataset
+    
+    if args.categorical_regularization > 0:
+        dataset_name += '_catreg{:g}'.format(args.categorical_regularization)
+    
     if args.split_size is not None:
         dataset_name += '_split{}'.format(args.split_size)
+    elif args.fixed_splits is not None:
+        dataset_name += '_fixedsplits'
     
     architecture_name = 'PinvGCN_' + args.coefficients
     for p in ['alpha','beta','gamma']:
@@ -201,6 +229,9 @@ if not args.no_save:
         results_dir, dataset_name, architecture_name,
         accuracies, setup_times if args.repeat_setup else setup_time, training_times,
         args.__dict__, 
-        {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked'},
+        {'Avg. abs. weights': weights_str if args.track_weights else 'Not tracked',
+         'Start time': start_time.strftime("%b %d, %Y, %H:%M:%S"),
+         'End time': datetime.now().strftime("%b %d, %Y, %H:%M:%S")
+        },
         status = status, file = __file__)
 
