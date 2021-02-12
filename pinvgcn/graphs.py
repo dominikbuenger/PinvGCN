@@ -62,12 +62,13 @@ class GraphSpectralSetup(object):
     """
     
     
-    def __init__(self, rank=None, loop_weights=None, dense_graph=False, eig_tol=0, eig_threshold=1e-6):
+    def __init__(self, rank=None, loop_weights=None, dense_graph=False, eig_tol=0, eig_threshold=1e-6, precompute_U0=False):
         self.rank = rank
         self.loop_weights = loop_weights
         self.dense_graph = dense_graph
         self.eig_tol = eig_tol
         self.eig_threshold = eig_threshold
+        self.precompute_U0 = precompute_U0
         
     def __call__(self, data):
         adj = normalized_adjacency(data, self.loop_weights, self.dense_graph)
@@ -75,7 +76,10 @@ class GraphSpectralSetup(object):
         if self.rank is None:
             raise NotImplementedError("Full non-approximated Pseudoinverse is not available for graphs")
         else:
-            w, U = graph_laplacian_decomposition(adj, self.rank+1, tol=self.eig_tol)
+            U0 = precompute_U_zero(data) if self.precompute_U0 else None
+            num_ev = self.rank + (U0.shape[1] if self.precompute_U0 else 1);
+            
+            w, U = graph_laplacian_decomposition(adj, num_ev, tol=self.eig_tol, precomputed_U0 = U0)
             setup_spectral_data(data, w, U, threshold=self.eig_threshold, max_rank = self.rank)
             
             if data.rank != self.rank:
@@ -127,11 +131,14 @@ class SBMData(Data):
 
 def lcc_data(data):
     edge_index = data.edge_index.cpu().numpy()
-    node_mask = lcc_mask(edge_index, data.num_nodes)
-        
-    if node_mask is None:
+    
+    num_components, component_ind = connected_components(edge_index, data.num_nodes)
+    
+    if num_components:
         print('Largest connected component: Full graph')
         return data
+    
+    node_mask = component_ind == np.argmax([(component_ind == i).sum() for i in range(num_components)])
     print('Largest connected component: {}/{} nodes'.format(node_mask.sum(), data.num_nodes))
 
     node_indices = -np.ones(data.num_nodes, dtype=int)
@@ -154,7 +161,7 @@ def lcc_data(data):
         kwargs[key] = val
     return Data(**kwargs)
 
-def lcc_mask(edge_index, num_nodes):
+def connected_components(edge_index, num_nodes):
     edge_index = edge_index[:, np.argsort(edge_index[0])]
     neighborhoods = np.zeros(num_nodes+1, dtype=int)
     j = 0
@@ -184,11 +191,7 @@ def lcc_mask(edge_index, num_nodes):
                     components[k] = c
                     q.put(k)
 
-    if c <= 1:
-        return None
-    c_max = 1+np.argmax([(components == i+1).sum() for i in range(c)])
-    return components == c_max
-
+    return c, components-1
 
 
 def adjacency(data, loop_weights=None, dense=False):
@@ -230,9 +233,18 @@ def normalized_adjacency(data, loop_weights=None, dense=False):
         return d[:,np.newaxis] * adj * d
     else:
         return adj.multiply(d).multiply(d[:,np.newaxis]).tocsr()
+
+def precompute_U_zero(data):
+    if 'edge_index' not in data:
+        return None
+    n = data.num_nodes
+    num_components, component_ind = connected_components(data.edge_index.cpu().numpy(), n)
     
+    U0 = np.array([(component_ind == i).astype(np.float64) for i in range(num_components)]).T
+    return U0 / np.sqrt(U0.sum(0));
+                
     
-def graph_laplacian_decomposition(adj, num_ev=None, tol=0):
+def graph_laplacian_decomposition(adj, num_ev=None, tol=0, precomputed_U0=None):
     r"""Return a (partial) eigen decomposition of the graph Laplacian. If
     num_ev is not None, only that many smallest eigenvalues are computed. The 
     parameter tol is used for scipy.linalg.eigs (if it is called)."""
@@ -248,10 +260,22 @@ def graph_laplacian_decomposition(adj, num_ev=None, tol=0):
         w = w[ind]
         U = U[:,ind]
     else:
-        if sp.issparse(adj):
-            adj = (adj + sp.identity(adj.shape[0])).tocsr()
+        if precomputed_U0 is not None:
+            matvec = lambda x: adj @ x + x - 2*precomputed_U0 @ (precomputed_U0.T @ x)
+            shifted_adj = sp.linalg.LinearOperator((n,n), matvec)
+            num_ev -= precomputed_U0.shape[1]
+        elif sp.issparse(adj):
+            shifted_adj = (adj + sp.identity(adj.shape[0])).tocsr()
         else:
-            adj += np.identity(adj.shape[0])
-        w, U = sp.linalg.eigsh(adj, num_ev, tol=tol)
+            shifted_adj = adj + np.identity(adj.shape[0])
+            
+        w, U = sp.linalg.eigsh(shifted_adj, num_ev, tol=tol)
         w = 2-w
+        
+        if precomputed_U0 is not None:
+            # print("Eigenvalue computation with precomputed U0: zero multiplicity {}, eigengap {:.4f}".format(
+            #     precomputed_U0.shape[1], w.min()))
+            U = np.hstack((precomputed_U0, U))
+            w = np.hstack((np.zeros(precomputed_U0.shape[1]), w))
+        
     return w.astype(np.float32), U.astype(np.float32)
